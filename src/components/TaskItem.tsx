@@ -1,24 +1,58 @@
 import React, { useState } from 'react';
 import { Task } from '../types';
 import { useTaskContext } from '../context/TaskContext';
-import { Check, Clock, Trash2, Edit2, Calendar, MoreHorizontal, CheckCircle2 } from 'lucide-react';
+import { Check, Clock, Trash2, Edit2, Calendar, MoreHorizontal, CheckCircle2, Loader2 } from 'lucide-react';
 import { getCategoryColor, getCategoryTextColor, formatTime, getCurrentDate } from '../utils/helpers';
 
 interface TaskItemProps {
   task: Task;
+  onEdit: (task: Task) => void;
 }
 
-const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
+const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
   const { toggleTask, deleteTask, updateHabitHistory } = useTaskContext();
   const [showOptions, setShowOptions] = useState(false);
   const [showHabitHistory, setShowHabitHistory] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingHabit, setIsUpdatingHabit] = useState<string | null>(null);
 
-  const handleToggle = () => {
-    toggleTask(task.id);
-    
-    // If it's a habit, also update today's history
-    if (task.isHabit) {
-      updateHabitHistory(task.id, getCurrentDate(), !task.completed);
+  const handleToggle = async () => {
+    try {
+      setIsToggling(true);
+      await toggleTask(task.id);
+      
+      // If it's a habit, also update today's history
+      if (task.isHabit) {
+        await updateHabitHistory(task.id, getCurrentDate(), !task.completed);
+      }
+    } catch (error) {
+      console.error('Error toggling task:', error);
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await deleteTask(task.id);
+      setShowOptions(false);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleHabitHistoryUpdate = async (date: string, completed: boolean) => {
+    try {
+      setIsUpdatingHabit(date);
+      await updateHabitHistory(task.id, date, completed);
+    } catch (error) {
+      console.error('Error updating habit history:', error);
+    } finally {
+      setIsUpdatingHabit(null);
     }
   };
 
@@ -32,15 +66,21 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
         {/* Checkbox */}
         <button
           onClick={handleToggle}
+          disabled={isToggling}
           className={`
             flex-shrink-0 h-6 w-6 rounded-full border-2 mr-3 mt-0.5 flex items-center justify-center
             ${task.completed 
               ? 'bg-emerald-500 border-emerald-500 text-white' 
               : 'border-gray-300 hover:border-indigo-500 transition-colors'}
+            ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}
           `}
           aria-label={task.completed ? "Mark as incomplete" : "Mark as complete"}
         >
-          {task.completed && <Check size={14} />}
+          {isToggling ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : task.completed ? (
+            <Check size={14} />
+          ) : null}
         </button>
         
         {/* Task content */}
@@ -86,17 +126,26 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
               <p className="text-xs text-gray-500 mb-2">Habit History:</p>
               <div className="flex flex-wrap gap-1">
                 {task.habitHistory.map((day, index) => (
-                  <div 
+                  <button
                     key={index}
-                    className={`w-6 h-6 rounded-sm flex items-center justify-center text-xs
+                    disabled={isUpdatingHabit === day.date}
+                    className={`w-6 h-6 rounded-sm flex items-center justify-center text-xs transition-colors
                       ${day.completed 
-                        ? 'bg-emerald-100 text-emerald-800' 
-                        : 'bg-gray-100 text-gray-500'}`}
+                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' 
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}
+                      ${isUpdatingHabit === day.date ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                    `}
                     title={`${day.date}: ${day.completed ? 'Completed' : 'Missed'}`}
-                    onClick={() => updateHabitHistory(task.id, day.date, !day.completed)}
+                    onClick={() => handleHabitHistoryUpdate(day.date, !day.completed)}
                   >
-                    {day.completed ? <CheckCircle2 size={14} /> : <span>·</span>}
-                  </div>
+                    {isUpdatingHabit === day.date ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : day.completed ? (
+                      <CheckCircle2 size={14} />
+                    ) : (
+                      <span>·</span>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
@@ -119,7 +168,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
                 className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                 onClick={() => {
                   setShowOptions(false);
-                  // Open edit modal (you'd need to implement this)
+                  onEdit(task);
                 }}
               >
                 <Edit2 size={14} className="mr-2" />
@@ -127,13 +176,15 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
               </button>
               <button 
                 className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 flex items-center"
-                onClick={() => {
-                  deleteTask(task.id);
-                  setShowOptions(false);
-                }}
+                onClick={handleDelete}
+                disabled={isDeleting}
               >
-                <Trash2 size={14} className="mr-2" />
-                Delete
+                {isDeleting ? (
+                  <Loader2 size={14} className="mr-2 animate-spin" />
+                ) : (
+                  <Trash2 size={14} className="mr-2" />
+                )}
+                {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           )}

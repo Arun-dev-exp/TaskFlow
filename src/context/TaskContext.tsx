@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useEffect, useReducer } from 'react';
+import React, { createContext, useContext, useEffect, useReducer, useState } from 'react';
 import { Task, TaskFilter, AppState, TaskCategory } from '../types';
 import { generateId, getCurrentDate } from '../utils/helpers';
+import { taskAPI, categoryAPI } from '../services/api';
+import { transformBackendTask, transformFrontendTask } from '../utils/dataTransformers';
 
 // Initial state
 const initialState: AppState = {
@@ -11,28 +13,29 @@ const initialState: AppState = {
 
 // Action types
 type Action = 
-  | { type: 'ADD_TASK'; payload: Omit<Task, 'id' | 'createdAt'> }
+  | { type: 'SET_TASKS'; payload: Task[] }
+  | { type: 'ADD_TASK'; payload: Task }
   | { type: 'UPDATE_TASK'; payload: Task }
   | { type: 'DELETE_TASK'; payload: string }
-  | { type: 'TOGGLE_TASK'; payload: string }
+  | { type: 'TOGGLE_TASK'; payload: Task }
   | { type: 'SET_FILTER'; payload: TaskFilter }
-  | { type: 'UPDATE_HABIT_HISTORY'; payload: { id: string; date: string; completed: boolean } };
+  | { type: 'UPDATE_HABIT_HISTORY'; payload: { id: string; date: string; completed: boolean } }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string | null };
 
 // Reducer function
 function taskReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case 'SET_TASKS':
+      return {
+        ...state,
+        tasks: action.payload
+      };
+    
     case 'ADD_TASK':
       return {
         ...state,
-        tasks: [
-          ...state.tasks,
-          {
-            ...action.payload,
-            id: generateId(),
-            createdAt: new Date().toISOString(),
-            habitHistory: action.payload.isHabit ? [{ date: getCurrentDate(), completed: false }] : undefined
-          }
-        ]
+        tasks: [action.payload, ...state.tasks]
       };
     
     case 'UPDATE_TASK':
@@ -53,9 +56,7 @@ function taskReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         tasks: state.tasks.map(task => 
-          task.id === action.payload 
-            ? { ...task, completed: !task.completed }
-            : task
+          task.id === action.payload.id ? action.payload : task
         )
       };
     
@@ -75,7 +76,7 @@ function taskReducer(state: AppState, action: Action): AppState {
             // If entry exists, update it; otherwise add new entry
             const updatedHistory = existingEntry 
               ? task.habitHistory?.map(h => 
-                  h.date === action.payload.date 
+                  h.date === action.payload.date
                     ? { ...h, completed: action.payload.completed }
                     : h
                 )
@@ -98,61 +99,157 @@ function taskReducer(state: AppState, action: Action): AppState {
 // Context
 type TaskContextType = {
   state: AppState;
-  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
-  updateTask: (task: Task) => void;
-  deleteTask: (id: string) => void;
-  toggleTask: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
+  updateTask: (task: Task) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  toggleTask: (id: string) => Promise<void>;
   setFilter: (filter: TaskFilter) => void;
-  updateHabitHistory: (id: string, date: string, completed: boolean) => void;
+  updateHabitHistory: (id: string, date: string, completed: boolean) => Promise<void>;
+  refreshTasks: () => Promise<void>;
 };
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 // Provider component
 export function TaskProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(taskReducer, initialState, () => {
-    const savedState = localStorage.getItem('taskState');
-    return savedState ? JSON.parse(savedState) : initialState;
-  });
-  
-  // Save to localStorage whenever state changes
+  const [state, dispatch] = useReducer(taskReducer, initialState);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load tasks from API on component mount
   useEffect(() => {
-    localStorage.setItem('taskState', JSON.stringify(state));
-  }, [state]);
-  
-  const addTask = (task: Omit<Task, 'id' | 'createdAt'>) => {
-    dispatch({ type: 'ADD_TASK', payload: task });
+    refreshTasks();
+  }, []);
+
+  const refreshTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await taskAPI.getAll();
+      if (response.success) {
+        const transformedTasks = response.data.map(transformBackendTask);
+        dispatch({ type: 'SET_TASKS', payload: transformedTasks });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tasks');
+      console.error('Error loading tasks:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addTask = async (task: Omit<Task, 'id' | 'createdAt'>) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const backendTaskData = transformFrontendTask(task);
+      const response = await taskAPI.create(backendTaskData);
+      
+      if (response.success) {
+        const newTask = transformBackendTask(response.data);
+        dispatch({ type: 'ADD_TASK', payload: newTask });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create task');
+      console.error('Error creating task:', err);
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const updateTask = (task: Task) => {
-    dispatch({ type: 'UPDATE_TASK', payload: task });
+  const updateTask = async (task: Task) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const backendTaskData = transformFrontendTask(task);
+      const response = await taskAPI.update(task.id, backendTaskData);
+      
+      if (response.success) {
+        const updatedTask = transformBackendTask(response.data);
+        dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task');
+      console.error('Error updating task:', err);
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const deleteTask = (id: string) => {
-    dispatch({ type: 'DELETE_TASK', payload: id });
+  const deleteTask = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await taskAPI.delete(id);
+      
+      if (response.success) {
+        dispatch({ type: 'DELETE_TASK', payload: id });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete task');
+      console.error('Error deleting task:', err);
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const toggleTask = (id: string) => {
-    dispatch({ type: 'TOGGLE_TASK', payload: id });
+  const toggleTask = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await taskAPI.toggle(id);
+      
+      if (response.success) {
+        const updatedTask = transformBackendTask(response.data);
+        dispatch({ type: 'TOGGLE_TASK', payload: updatedTask });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to toggle task');
+      console.error('Error toggling task:', err);
+    } finally {
+      setLoading(false);
+    }
   };
   
   const setFilter = (filter: TaskFilter) => {
     dispatch({ type: 'SET_FILTER', payload: filter });
   };
   
-  const updateHabitHistory = (id: string, date: string, completed: boolean) => {
-    dispatch({ type: 'UPDATE_HABIT_HISTORY', payload: { id, date, completed } });
+  const updateHabitHistory = async (id: string, date: string, completed: boolean) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // For now, we'll update the local state
+      // In the future, you might want to add a specific API endpoint for this
+      dispatch({ type: 'UPDATE_HABIT_HISTORY', payload: { id, date, completed } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update habit history');
+      console.error('Error updating habit history:', err);
+    } finally {
+      setLoading(false);
+    }
   };
   
   return (
     <TaskContext.Provider value={{ 
       state, 
+      loading,
+      error,
       addTask, 
       updateTask, 
       deleteTask, 
       toggleTask, 
       setFilter,
-      updateHabitHistory 
+      updateHabitHistory,
+      refreshTasks
     }}>
       {children}
     </TaskContext.Provider>

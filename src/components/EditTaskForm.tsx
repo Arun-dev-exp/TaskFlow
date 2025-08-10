@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useTaskContext } from '../context/TaskContext';
+import { Task } from '../types';
 import { X, Loader2 } from 'lucide-react';
 
-interface NewTaskFormProps {
+interface EditTaskFormProps {
+  task: Task;
   onClose: () => void;
 }
 
-const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
-  const { addTask, state, loading } = useTaskContext();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('work');
-  const [isHabit, setIsHabit] = useState(false);
-  const [hasTimeBlock, setHasTimeBlock] = useState(false);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('10:00');
+const EditTaskForm: React.FC<EditTaskFormProps> = ({ task, onClose }) => {
+  const { updateTask, state, loading } = useTaskContext();
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description || '');
+  const [category, setCategory] = useState(task.category);
+  const [isHabit, setIsHabit] = useState(task.isHabit);
+  const [hasTimeBlock, setHasTimeBlock] = useState(Boolean(task.timeBlock));
+  const [startTime, setStartTime] = useState(task.timeBlock?.start || '09:00');
+  const [endTime, setEndTime] = useState(task.timeBlock?.end || '10:00');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     // Focus the title input when the form opens
-    const titleInput = document.getElementById('title');
+    const titleInput = document.getElementById('edit-title');
     if (titleInput) {
       titleInput.focus();
     }
@@ -33,10 +35,10 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
     try {
       setIsSubmitting(true);
       
-      await addTask({
+      await updateTask({
+        ...task,
         title: title.trim(),
         description: description.trim() || undefined,
-        completed: false,
         category,
         isHabit,
         timeBlock: hasTimeBlock ? { start: startTime, end: endTime } : undefined,
@@ -44,7 +46,7 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
       
       onClose();
     } catch (error) {
-      console.error('Error adding task:', error);
+      console.error('Error updating task:', error);
       // Error is already handled by the context
     } finally {
       setIsSubmitting(false);
@@ -84,7 +86,7 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200 max-w-2xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-semibold text-gray-900">Add New Task</h3>
+        <h3 className="text-xl font-semibold text-gray-900">Edit Task</h3>
         <button 
           onClick={onClose}
           disabled={isFormDisabled}
@@ -99,12 +101,12 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
         <div className="space-y-6">
           {/* Title */}
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="edit-title" className="block text-sm font-medium text-gray-700 mb-2">
               Title*
             </label>
             <input
               type="text"
-              id="title"
+              id="edit-title"
               value={title}
               onChange={handleTitleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900 placeholder-gray-400"
@@ -112,32 +114,30 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
               required
               autoFocus
             />
-            <p className="mt-1 text-sm text-gray-500">Current value: {title}</p>
           </div>
           
           {/* Description */}
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 mb-2">
               Description (optional)
             </label>
             <textarea
-              id="description"
+              id="edit-description"
               value={description}
               onChange={handleDescriptionChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900 placeholder-gray-400 resize-vertical"
               placeholder="Add details about this task"
               rows={3}
             />
-            <p className="mt-1 text-sm text-gray-500">Current value: {description}</p>
           </div>
           
           {/* Category */}
           <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="edit-category" className="block text-sm font-medium text-gray-700 mb-2">
               Category
             </label>
             <select
-              id="category"
+              id="edit-category"
               value={category}
               onChange={handleCategoryChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900"
@@ -154,12 +154,12 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
           <div className="flex items-center">
             <input
               type="checkbox"
-              id="isHabit"
+              id="edit-isHabit"
               checked={isHabit}
               onChange={handleIsHabitChange}
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
             />
-            <label htmlFor="isHabit" className="ml-3 block text-sm text-gray-700 cursor-pointer">
+            <label htmlFor="edit-isHabit" className="ml-3 block text-sm text-gray-700 cursor-pointer">
               This is a recurring habit
             </label>
           </div>
@@ -168,12 +168,12 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
           <div className="flex items-center">
             <input
               type="checkbox"
-              id="hasTimeBlock"
+              id="edit-hasTimeBlock"
               checked={hasTimeBlock}
               onChange={handleHasTimeBlockChange}
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
             />
-            <label htmlFor="hasTimeBlock" className="ml-3 block text-sm text-gray-700 cursor-pointer">
+            <label htmlFor="edit-hasTimeBlock" className="ml-3 block text-sm text-gray-700 cursor-pointer">
               Add time block
             </label>
           </div>
@@ -182,24 +182,24 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
           {hasTimeBlock && (
             <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div>
-                <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="edit-startTime" className="block text-sm font-medium text-gray-700 mb-2">
                   Start Time
                 </label>
                 <input
                   type="time"
-                  id="startTime"
+                  id="edit-startTime"
                   value={startTime}
                   onChange={handleStartTimeChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900"
                 />
               </div>
               <div>
-                <label htmlFor="endTime" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="edit-endTime" className="block text-sm font-medium text-gray-700 mb-2">
                   End Time
                 </label>
                 <input
                   type="time"
-                  id="endTime"
+                  id="edit-endTime"
                   value={endTime}
                   onChange={handleEndTimeChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900"
@@ -226,10 +226,10 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
               {isSubmitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Adding...
+                  Updating...
                 </>
               ) : (
-                'Add Task'
+                'Update Task'
               )}
             </button>
           </div>
@@ -239,4 +239,4 @@ const NewTaskForm: React.FC<NewTaskFormProps> = ({ onClose }) => {
   );
 };
 
-export default NewTaskForm;
+export default EditTaskForm;
