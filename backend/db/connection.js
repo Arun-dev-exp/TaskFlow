@@ -10,16 +10,15 @@ dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 
 
 // Database configuration from environment variables
 const dbConfig = {
-  user: process.env.DB_USER, 
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME, 
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT),
-  // Connection pool settings
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  connectionString: process.env.DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 };
+
 
 // Create connection pool
 export const pool = new Pool(dbConfig);

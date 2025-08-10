@@ -33,7 +33,7 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api/', limiter);
-
+app.set('trust proxy', 1);
 // CORS configuration
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
@@ -68,41 +68,6 @@ app.get('/health', async (req, res) => {
     });
   }
 });
-
-// Database initialization endpoint - DISABLED (tables already created manually)
-// app.post('/api/init-db', async (req, res) => {
-//   try {
-//     const fs = await import('fs');
-//     const path = await import('path');
-//     const schemaPath = path.join(dirname(fileURLToPath(import.meta.url)), '..', 'database', 'schema.sql');
-//     
-//     const schema = fs.readFileSync(schemaPath, 'utf8');
-//     
-//     // Split the schema into individual statements
-//     const statements = schema
-//       .split(';')
-//       .map(stmt => stmt.trim())
-//       .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
-//     
-//     for (const statement of statements) {
-//       if (statement.trim()) {
-//         await pool.query(statement);
-//       }
-//     }
-//     
-//     res.json({ 
-//       success: true, 
-//       message: 'Database initialized successfully' 
-//     });
-//   } catch (error) {
-//     console.error('Error initializing database:', error);
-//     res.status(500).json({ 
-//       success: false, 
-//       error: 'Failed to initialize database',
-//       message: error.message 
-//     });
-//   }
-// });
 
 // API routes
 app.use('/api/tasks', taskRoutes);
