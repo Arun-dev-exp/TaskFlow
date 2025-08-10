@@ -184,8 +184,8 @@ Create a `.env` file in the backend directory:
 ```env
 # Database Configuration
 DB_USER=postgre
-DB_PASSWORD=Arun@$
-DB_NAME=Task Flow
+DB_PASSWORD=your_password
+DB_NAME=taskflow
 DB_HOST=localhost
 DB_PORT=5432
 
